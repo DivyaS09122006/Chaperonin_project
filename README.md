@@ -1,32 +1,48 @@
-# CTQW-Chaperonin: Quantum Walks for Modeling Chaperonin-Assisted Protein Folding
+# Exploration vs. Escape: Quantum Walks for Modeling Chaperonin-Assisted Protein Folding
 
-**Status:** 🚧 Early-stage / active development 
+**Status:** Active — core findings established, hardware validation in progress
 
 ## Overview
 
-This project investigates whether a **continuous-time quantum walk (CTQW)** on a Markov State Model (MSM)-derived protein conformational graph — perturbed by an operator modeling GroEL-GroES ATP hydrolysis — can recover biologically observed folding pathways more faithfully than classical random walk baselines, and whether the resulting quantum dynamical features are biologically interpretable.
+This project investigates whether **continuous-time quantum walks (CTQW)** on a Markov State Model (MSM)-derived protein conformational graph behave differently from classical random walks when navigating kinetic traps — and whether that difference connects mechanistically to how the GroEL-GroES chaperonin assists protein folding via ATP hydrolysis.
 
-## Motivation
+## Core finding
 
-Proteins can become kinetically trapped in non-native conformations. In vivo, the GroEL-GroES chaperonin assists escape from these traps via ATP-driven conformational cycling ("iterative annealing"). Classical random walks model probability as diffusing smoothly across a conformational graph — it pools in traps and stays, since diffusion has no escape mechanism once equilibrium is reached.
+Classical diffusion and quantum walks represent two different strategies for navigating a rugged energy landscape: **exploitation vs. exploration**.
 
-A CTQW evolves complex-valued amplitude instead of real-valued probability, using the same graph Laplacian but with an imaginary term in the time-evolution operator (`expm(-iLt)` vs. `expm(-Lt)`). This introduces interference — some paths reinforce, others cancel — creating a mechanism for trap escape that classical diffusion structurally lacks. A perturbation operator, timed to the ATP hydrolysis cycle and targeted at high-retention (trap) states, is applied to model the chaperonin's active role in redirecting amplitude toward the native state.
+- **Classical diffusion** converges quickly to a fixed equilibrium and stops exploring. On real HP35 folding kinetics, it settles into an effective ~1.22 conformational states, permanently.
+- **A quantum walk on the same landscape never settles** — it sustains ongoing exploration, reaching an effective breadth of ~3.27 states over time.
+
+This is a categorically different dynamical behavior driven by quantum interference — not a failure to converge. On an idealized toy landscape with engineered multi-path structure, quantum interference also allows escape from a kinetic trap that classical diffusion structurally cannot achieve (exceeding classical's equilibrium ceiling repeatedly, by up to ~3x).
+
+**Limitations:** on real HP35 kinetics, quantum's broader exploration does not clearly, preferentially target the known biologically important folding intermediate over less significant states, and quantum does not outperform classical on direct native-state occupation probability.
 
 ## Method
 
-1. **MSM construction** — Built from real MD trajectories (HP35/villin headpiece, SimTK) using PyEMMA. Nodes = conformational states, edges = transition probabilities, high self-transition = kinetic trap.
-2. **Three-way dynamical comparison** — Classical random walk, plain CTQW, and CTQW + ATP-hydrolysis perturbation, all on the same graph.
-3. **GNN classification** — PyTorch Geometric model trained on quantum walk probability distributions as node features, classifying on-pathway vs. trapped trajectories.
-4. **SHAP interpretability** — Identifies which features/timesteps drive classification, validated against known HP35 folding intermediates.
+1. **Toy graph validation** — hand-built directed graphs with an engineered kinetic trap, used to validate the classical/quantum/perturbation pipeline in a fully inspectable setting before touching real data.
+2. **Real data** — a published, peer-reviewed 12-state MSM of HP35 (villin headpiece) folding kinetics (Nagel, Sartore & Stock, 2023), used directly via its published transition timescales (Table S2) rather than reprocessing raw MD trajectories.
+3. **Detailed-balance symmetrization** — real biological kinetic traps have extreme rate asymmetries (spanning 3+ orders of magnitude) that naive symmetrization destroys. We use a population-weighted (stationary-distribution-based) symmetrization, following the same methodology as the source paper, and independently validate it (our computed native-basin population, 68.3%, matches the paper's reported ~68%).
+4. **Perturbation operator** (modeling ATP hydrolysis) — tested via both fixed-periodic and phase-locked firing schedules. Neither clearly outperformed plain (unperturbed) quantum interference on the toy graph — a genuine, reported negative result.
 
-## Scope & limitations
+## What this isn't
 
-HP35 serves as a proof-of-concept benchmark, not an in vivo GroEL substrate. Generalization to a genuine chaperonin substrate (ACBP or rhodanese) is planned for publication-strength claims.
+This is a simulation-based study of quantum-mechanical *dynamics* applied to a real biological transition network — not a claim that protein folding is a literal quantum-coherent process, and not (yet) run on real quantum hardware. See [Roadmap](#roadmap) for the hardware validation currently in progress.
 
 ## Stack
 
-- `PyEMMA`, `MDTraj` — MSM construction from MD trajectories
-- `scipy` — CTQW simulation via matrix exponentiation
-- `PyTorch Geometric` — GNN
-- `SHAP` — interpretability
+- `scipy` — CTQW and classical diffusion simulation via matrix exponentiation
+- `numpy` — graph construction, stationary distribution, detailed-balance symmetrization
+- `matplotlib` — trajectory and heatmap visualization
+- Real data: Nagel, Sartore & Stock (2023), *"Selecting Features for Markov Modeling: A Case Study on HP35,"* [arXiv:2303.03814](https://arxiv.org/abs/2303.03814)
 
+## Roadmap
+
+- [x] Toy graph: classical vs. CTQW vs. perturbed CTQW comparison
+- [x] Real HP35 MSM: naive symmetrization (diagnosed as flawed — destroys real trap asymmetry)
+- [x] Real HP35 MSM: detailed-balance symmetrization (validated fix)
+- [x] Participation ratio (exploration) analysis
+- [x] State-level interpretability check (honest, non-flattering result reported)
+- [ ] Hardware validation of toy-graph result (~2 qubits, tests whether interference survives real decoherence) — **in progress**
+- [ ] Generalization to a second protein (Trp-cage candidate identified; blocked on manual digitization of a figure-only transition network — not yet attempted)
+- [ ] Fine-grained MSM from raw trajectory data (PyEMMA pipeline)
+- [ ] GNN + SHAP on a properly-sized dataset (deferred — current 12-state system too small for meaningful trained-model evaluation)
